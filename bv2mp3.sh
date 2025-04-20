@@ -15,20 +15,52 @@ MP3_TITLE=""
 MP3_SINGER=""
 MP3_COVER=""
 
+get_cover() {
+  if ! has_wget; then
+    return
+  fi
+  local tdir
+  tdir="$(mktemp -d)"
+  wget "https://www.bilibili.com/video/$BV" --quiet -O "$tdir/$BV.html.gz"
+  gzip -d "$tdir/$BV.html.gz"
+  local cover
+  cover="https:$(grep -o -P -e '<meta.*?>' "$tdir/$BV.html" \
+    | grep -P -e 'og:image' \
+    | grep -o -P -e 'content=".*?"' \
+    | grep -o -P -e '[a-zA-Z0-9./]*@' \
+    | grep -o -P -e '[a-zA-Z0-9./]*')"
+  local filetype
+  filetype="${cover##*.}"
+  wget --quiet -O "$tdir/cover.$filetype" "$cover" || warn "Failed to get cover image"
+  if [[ -f "$tdir/cover.$filetype" ]]; then
+    MP3_COVER="$tdir/cover.$filetype"
+  fi
+}
+
+info() {
+  printf "\033[;32m%s\033[0m\n" "$@"
+}
+
+warn() {
+  printf "\033[;33m%s\033[0m\n" "$@"
+}
+
+erro() {
+  printf "\033[;31m%s\033[0m\n" "$@" 1>&2
+}
+
 die() {
-  echo "==="
-  echo "$@"
+  erro "$@"
   exit 1
 }
 
 usage() {
   cat << __EOF__
-    Usage:
-    ${0##*/} [options] <BV>
+Usage: ${0##*/} [options] <BV>
 
     <BV>: bilibili BV number for video
 
-    Options:
+Options:
     -h, --help,                         Show this help
     -r, --remove                        Remove all tags before write
     -b, --browser <firefox | chromium>  The name of the browser to load cookies from.
@@ -38,9 +70,25 @@ usage() {
 __EOF__
 }
 
+has_id3tag() {
+  if ! which id3tag &> /dev/null; then
+    warn "id3tag is required for edit ID3v1 tag"
+    return 1
+  fi
+  return 0
+}
+
 has_musictag() {
-  if ! which musictag; then
-    echo "Required musictag"
+  if ! which musictag &> /dev/null; then
+    warn "musictag is required for edit ID3v2 tag"
+    return 1
+  fi
+  return 0
+}
+
+has_wget() {
+  if ! which wget &> /dev/null; then
+    warn "wget is required for get bilibili video cover"
     return 1
   fi
   return 0
@@ -58,15 +106,19 @@ main() {
     musictag --remove "$FILE_MP3"
   fi
 
-  id3tag --v1tag --comment "$BV" "$FILE_MP3" || echo "id3tag: add comment failed"
+  if has_id3tag; then
+    id3tag --v1tag --comment="$BV" "$FILE_MP3" || warn "id3tag: add comment failed"
+  fi
   if has_musictag; then
-    musictag --comment "$BV" "$FILE_MP3" || echo "musictag: add comment failed"
+    musictag --comment "$BV" "$FILE_MP3" || warn "musictag: add comment failed"
   fi
 
   if [[ "$MP3_SINGER" != "" && "$MP3_TITLE" != "" ]]; then
-    id3tag --v1tag --song "$MP3_TITLE" \
-      --artist "$MP3_SINGER" \
-      "$FILE_MP3" || echo "add title and singer failed"
+    if has_id3tag; then
+      id3tag --v1tag --song="$MP3_TITLE" \
+        --artist "$MP3_SINGER" \
+        "$FILE_MP3" || warn "id3tag: add title and singer failed"
+    fi
     if has_musictag; then
       musictag --artist "$MP3_SINGER" --title "$MP3_TITLE" "$FILE_MP3"
       if [[ -n "$MP3_COVER" ]] && [[ -f "$MP3_COVER" ]]; then
@@ -102,7 +154,7 @@ while [[ $# -gt 1 ]]; do
     -b | --browser)
       shift
       BROWSER=$1
-      echo "Use cookies from browswer ${BROWSER}"
+      info "Use cookies from browswer ${BROWSER}"
       YT_FLAGS=("$BROWSER_FLAG" "$BROWSER" "${YT_FLAGS[@]}")
       ;;
     -r | --remove)
@@ -121,8 +173,7 @@ while [[ $# -gt 1 ]]; do
       MP3_COVER="$1"
       ;;
     *)
-      echo "unknow option: $1"
-      exit 2
+      die "unknow option: $1"
       ;;
   esac
   shift
@@ -131,15 +182,17 @@ done
 BV="$1"
 
 if [[ -z "$MP3_TITLE" || -z "$MP3_SINGER" ]]; then
-  echo "======================================================"
-  echo "You have batter set the title and singer for mp3 file."
-  echo "======================================================"
+  warn "You have batter set the title and singer for mp3 file."
 fi
 
-if [[ -n "$BV" ]]; then
-  main
+if [[ -z "$BV" ]]; then
+  die "Need BV number"
 fi
 
+if [[ -z "$MP3_COVER" ]]; then
+  get_cover
+fi
+main
 exit 0
 
 # vim: sts=2 ts=2 sw=2
