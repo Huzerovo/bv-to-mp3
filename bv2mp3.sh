@@ -14,11 +14,13 @@ FLAG_REMOVE=0
 MP3_TITLE=""
 MP3_SINGER=""
 MP3_COVER=""
+GET_COVER_FROM_VIDEO="false"
 
 get_cover() {
   if ! has_wget; then
     return
   fi
+  warn "Getting cover from video cover"
   local tdir
   tdir="$(mktemp -d)"
   wget "https://www.bilibili.com/video/$BV" --quiet -O "$tdir/$BV.html.gz"
@@ -63,10 +65,11 @@ Usage: ${0##*/} [options] <BV>
 Options:
     -h, --help,                         Show this help
     -r, --remove                        Remove all tags before write
-    -b, --browser <firefox | chromium>  The name of the browser to load cookies from.
+    -b, --browser <firefox | chromium>  The name of the browser to load cookies from
     -t, --title                         Specifies the music title
     -s, --singer                        Specifies the music singer
     -p, --picture <file>                Set the picture as cover
+    --get-cover                         Get Video cover as mp3 cover
 __EOF__
 }
 
@@ -172,6 +175,9 @@ while [[ $# -gt 1 ]]; do
       shift
       MP3_COVER="$1"
       ;;
+    --get-cover)
+      GET_COVER_FROM_VIDEO="true"
+      ;;
     *)
       die "unknow option: $1"
       ;;
@@ -190,7 +196,9 @@ if [[ -z "$BV" ]]; then
 fi
 
 if [[ -z "$MP3_COVER" ]]; then
-  get_cover
+  if [[ "$GET_COVER_FROM_VIDEO" == "true" ]]; then
+    get_cover
+  fi
 fi
 main
 exit 0
