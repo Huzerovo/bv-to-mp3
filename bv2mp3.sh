@@ -6,7 +6,7 @@ BROWSER="firefox"
 BV=""
 BROWSER_FLAG="--cookies-from-browser"
 BILI_URL="https://www.bilibili.com/video/"
-YT_FLAGS=("--extract-audio" "--audio-format" "mp3" "--audio-quality" "0")
+YT_FLAGS=("--extract-audio" "--audio-format" "mp3" "--audio-quality" "192k")
 TRASH_DIR="$HOME/Public/tmp"
 
 FLAG_REMOVE=0
